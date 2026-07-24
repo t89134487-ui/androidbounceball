@@ -4,26 +4,25 @@ import '../models/particle.dart';
 class ParticlePainter extends CustomPainter {
   final List<Particle> particles;
 
-  ParticlePainter({required this.particles});
+  static final Paint _particlePaint = Paint()..style = PaintingStyle.fill;
+  static final Paint _glowPaint = Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0)..style = PaintingStyle.fill;
+
+  ParticlePainter({
+    required this.particles,
+    required Listenable repaint,
+  }) : super(repaint: repaint);
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final p in particles) {
+    for (int i = 0; i < particles.length; i++) {
+      final p = particles[i];
       final double alpha = p.lifespan / p.maxLifespan;
 
-      // Beautiful star-burst particle paint with a circular glow
-      final paint = Paint()
-        ..color = p.color.withAlpha((alpha * 255).round())
-        ..style = PaintingStyle.fill;
+      _particlePaint.color = p.color.withAlpha((alpha * 255).round());
+      canvas.drawCircle(p.position, p.size * alpha, _particlePaint);
 
-      // Draw particle as a glowing soft circle or tiny diamond
-      canvas.drawCircle(p.position, p.size * alpha, paint);
-
-      // Flare glow
-      final glowPaint = Paint()
-        ..color = p.color.withAlpha((alpha * 0.3 * 255).round())
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
-      canvas.drawCircle(p.position, p.size * alpha * 2.5, glowPaint);
+      _glowPaint.color = p.color.withAlpha((alpha * 0.3 * 255).round());
+      canvas.drawCircle(p.position, p.size * alpha * 2.5, _glowPaint);
     }
   }
 

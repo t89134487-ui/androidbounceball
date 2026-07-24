@@ -48,6 +48,9 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
   Offset? _dragStart;
   Offset? _dragEnd;
 
+  // Max concurrent particles to ensure high frame rate
+  static const int _maxParticles = 250;
+
   // Preset colors for customization
   final List<Color> _availableColors = [
     Colors.cyanAccent,
@@ -192,14 +195,23 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
     }
 
     // 2. Obstacle pulsing updates
-    for (final obs in _obstacles) {
-      obs.update(dt);
+    for (int i = 0; i < _obstacles.length; i++) {
+      _obstacles[i].update(dt);
     }
 
     // 3. Physics Updates with continuous sub-stepping for extreme velocities
     _runPhysicsSubSteps(dt);
 
-    setState(() {});
+    // CRITICAL OPTIMIZATION: Bypassing setState(() {}) completely on every single frame!
+    // Instead, the CustomPaint's "repaint" parameter listens to the _ticker controller
+    // and repaints ONLY the canvas, completely skipping expensive widget builds, layout passes,
+    // and slide/dropdown layout tree calculations.
+    //
+    // We only call setState if the number of balls changes from active to empty, to toggle the helper banner.
+    if (_balls.isEmpty && _particles.isEmpty) {
+      // Small state change update when completely empty
+      setState(() {});
+    }
   }
 
   void _runPhysicsSubSteps(double dt) {
@@ -213,14 +225,16 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
   }
 
   void _applyForcesAndMovement(double sdt) {
-    for (final ball in _balls) {
+    for (int i = 0; i < _balls.length; i++) {
+      final ball = _balls[i];
       // Apply gravity X and Y, plus Wind effects
       double totalForceX = _gravityX + _windPower;
       double totalForceY = _gravityY;
 
       // Vortex Gravitational Attraction
       if (_enableVortex) {
-        for (final obs in _obstacles) {
+        for (int o = 0; o < _obstacles.length; o++) {
+          final obs = _obstacles[o];
           if (obs.type == ObstacleType.vortex) {
             final Offset dir = obs.position - ball.position;
             final double dist = dir.distance;
@@ -256,7 +270,8 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
     // Estimated layout height based on screen size, bounded at bottom
     final double height = MediaQuery.of(context).size.height - 250;
 
-    for (final ball in _balls) {
+    for (int i = 0; i < _balls.length; i++) {
+      final ball = _balls[i];
       // --- COLLISION: Screen walls ---
       const double padding = 2.0;
 
@@ -265,7 +280,7 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
         ball.position = Offset(ball.radius + padding, ball.position.dy);
         ball.velocity = Offset(-ball.velocity.dx * _restitution, ball.velocity.dy);
         ball.applySquash(0.65, 1.35); // Squish sideways
-        _spawnImpactParticles(ball.position - Offset(ball.radius, 0), ball.color, 8);
+        _spawnImpactParticles(ball.position - Offset(ball.radius, 0), ball.color, 6);
         HapticFeedback.lightImpact();
       }
       // Right Wall
@@ -273,7 +288,7 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
         ball.position = Offset(width - ball.radius - padding, ball.position.dy);
         ball.velocity = Offset(-ball.velocity.dx * _restitution, ball.velocity.dy);
         ball.applySquash(0.65, 1.35);
-        _spawnImpactParticles(ball.position + Offset(ball.radius, 0), ball.color, 8);
+        _spawnImpactParticles(ball.position + Offset(ball.radius, 0), ball.color, 6);
         HapticFeedback.lightImpact();
       }
 
@@ -282,7 +297,7 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
         ball.position = Offset(ball.position.dx, ball.radius + padding);
         ball.velocity = Offset(ball.velocity.dx, -ball.velocity.dy * _restitution);
         ball.applySquash(1.35, 0.65); // Squish vertical
-        _spawnImpactParticles(ball.position - Offset(0, ball.radius), ball.color, 8);
+        _spawnImpactParticles(ball.position - Offset(0, ball.radius), ball.color, 6);
         HapticFeedback.lightImpact();
       }
       // Bottom Wall
@@ -290,12 +305,13 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
         ball.position = Offset(ball.position.dx, height - ball.radius);
         ball.velocity = Offset(ball.velocity.dx, -ball.velocity.dy * _restitution);
         ball.applySquash(1.35, 0.65);
-        _spawnImpactParticles(ball.position + Offset(0, ball.radius), ball.color, 8);
+        _spawnImpactParticles(ball.position + Offset(0, ball.radius), ball.color, 6);
         HapticFeedback.lightImpact();
       }
 
       // --- COLLISION: Obstacles/Bumpers ---
-      for (final obs in _obstacles) {
+      for (int o = 0; o < _obstacles.length; o++) {
+        final obs = _obstacles[o];
         if (obs.type == ObstacleType.circularBumper || obs.type == ObstacleType.vortex || obs.type == ObstacleType.teleporter) {
           final double distance = (ball.position - obs.position).distance;
           final double minDistance = ball.radius + obs.radius;
@@ -305,24 +321,19 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
 
             if (obs.type == ObstacleType.teleporter && _enableTeleporters) {
               if (obs.targetPortal != null) {
-                // Teleport ball instantly with a gorgeous colorburst particle flash
-                _spawnImpactParticles(ball.position, obs.color, 15);
+                _spawnImpactParticles(ball.position, obs.color, 12);
                 ball.position = obs.targetPortal!;
-                // Slight speed boost out of portal
                 ball.velocity = normal * (ball.velocity.distance + 40.0);
-                _spawnImpactParticles(ball.position, obs.color, 15);
+                _spawnImpactParticles(ball.position, obs.color, 12);
                 obs.triggerActivity();
                 HapticFeedback.mediumImpact();
                 break;
               }
             } else if (obs.type == ObstacleType.vortex) {
-              // Slowly spiral and spit out or bounce
               ball.velocity = (normal * ball.velocity.distance) + Offset(-normal.dy, normal.dx) * 45;
             } else {
-              // Bumper bounce (Standard bumper pushes back with extra velocity!)
               ball.position = obs.position + normal * minDistance;
 
-              // Reflect velocity vector
               final double dotProduct = ball.velocity.dx * normal.dx + ball.velocity.dy * normal.dy;
               ball.velocity = Offset(
                 (ball.velocity.dx - 2 * dotProduct * normal.dx) * (_restitution + 0.15),
@@ -331,13 +342,12 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
 
               ball.applySquash(0.55, 1.45);
               obs.triggerActivity();
-              _spawnImpactParticles(ball.position, obs.color, 14);
+              _spawnImpactParticles(ball.position, obs.color, 10);
               HapticFeedback.mediumImpact();
             }
           }
         }
         else if (obs.type == ObstacleType.rectangularPeg) {
-          // AABB vs Circle Collision
           final double halfW = obs.size.width / 2;
           final double halfH = obs.size.height / 2;
 
@@ -348,7 +358,6 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
           final double distance = (ball.position - closestPoint).distance;
 
           if (distance < ball.radius) {
-            // Intersection detected!
             final Offset normalDir = ball.position - closestPoint;
             final Offset normal = normalDir.distance == 0
                 ? const Offset(0, -1)
@@ -364,16 +373,16 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
 
             ball.applySquash(1.4, 0.6);
             obs.triggerActivity();
-            _spawnImpactParticles(closestPoint, obs.color, 12);
+            _spawnImpactParticles(closestPoint, obs.color, 10);
             HapticFeedback.mediumImpact();
           }
         }
       }
 
       // --- COLLISION: Custom drawn line obstacles ---
-      for (final line in _lineObstacles) {
+      for (int l = 0; l < _lineObstacles.length; l++) {
+        final line = _lineObstacles[l];
         if (_checkCircleLineCollision(ball, line)) {
-          // Resolve elastic impact
           HapticFeedback.mediumImpact();
         }
       }
@@ -392,29 +401,24 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
           if (distance < minDistance) {
             final Offset normal = (b2.position - b1.position) / (distance == 0 ? 1 : distance);
 
-            // 1. Separate them instantly to prevent overlapping
             final double overlap = minDistance - distance;
             b1.position -= normal * (overlap * 0.5);
             b2.position += normal * (overlap * 0.5);
 
-            // 2. Perform elastic rebound calculation (1D projection along normal)
             final Offset relVel = b2.velocity - b1.velocity;
             final double velAlongNormal = relVel.dx * normal.dx + relVel.dy * normal.dy;
 
-            // Only bounce if balls are moving towards each other
             if (velAlongNormal < 0) {
-              // Equal mass assumption
               final double impulseScalar = -(1.0 + _restitution) * velAlongNormal / 2;
               final Offset impulse = normal * impulseScalar;
 
               b1.velocity -= impulse;
               b2.velocity += impulse;
 
-              // Apply squash & stretch dynamics
               b1.applySquash(0.7, 1.3);
               b2.applySquash(0.7, 1.3);
 
-              _spawnImpactParticles((b1.position + b2.position) * 0.5, b1.color, 10);
+              _spawnImpactParticles((b1.position + b2.position) * 0.5, b1.color, 8);
               HapticFeedback.lightImpact();
             }
           }
@@ -430,25 +434,21 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
     final double abLenSq = ab.dx * ab.dx + ab.dy * ab.dy;
     if (abLenSq == 0) return false;
 
-    // Project ball center onto line segment
     double t = (ap.dx * ab.dx + ap.dy * ab.dy) / abLenSq;
-    t = max(0.0, min(1.0, t)); // Clamp to segment boundaries
+    t = max(0.0, min(1.0, t));
 
     final Offset closestPoint = line.start + ab * t;
     final double dist = (ball.position - closestPoint).distance;
     final double collisionThresh = ball.radius + (line.thickness / 2);
 
     if (dist < collisionThresh) {
-      // Collision detected! Calculate recovery normal
       final Offset normalDir = ball.position - closestPoint;
       final Offset normal = normalDir.distance == 0
-          ? Offset(-ab.dy, ab.dx) / sqrt(abLenSq) // fallback normal perp to line
+          ? Offset(-ab.dy, ab.dx) / sqrt(abLenSq)
           : normalDir / normalDir.distance;
 
-      // Position adjustment
       ball.position = closestPoint + normal * collisionThresh;
 
-      // Velocity reflection
       final double dotProduct = ball.velocity.dx * normal.dx + ball.velocity.dy * normal.dy;
       ball.velocity = Offset(
         (ball.velocity.dx - 2 * dotProduct * normal.dx) * _restitution,
@@ -456,18 +456,25 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
       );
 
       ball.applySquash(1.3, 0.7);
-      _spawnImpactParticles(closestPoint, line.color, 10);
+      _spawnImpactParticles(closestPoint, line.color, 8);
       return true;
     }
     return false;
   }
 
   void _spawnImpactParticles(Offset position, Color color, int count) {
+    // OPTIMIZATION: Cap absolute maximum active particles to prevent performance degradation
+    if (_particles.length >= _maxParticles) {
+      return;
+    }
+
     final random = Random();
-    for (int i = 0; i < count; i++) {
+    final int toSpawn = min(count, _maxParticles - _particles.length);
+
+    for (int i = 0; i < toSpawn; i++) {
       final double angle = random.nextDouble() * 2 * pi;
       final double speed = random.nextDouble() * _particleExplosionPower + 50.0;
-      final double size = random.nextDouble() * 6.0 + 3.0;
+      final double size = random.nextDouble() * 5.0 + 2.5;
 
       _particles.add(
         Particle(
@@ -475,23 +482,22 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
           velocity: Offset(cos(angle) * speed, sin(angle) * speed),
           color: color,
           size: size,
-          maxLifespan: random.nextDouble() * 0.4 + 0.3,
+          maxLifespan: random.nextDouble() * 0.35 + 0.25,
         ),
       );
     }
   }
 
   void _addNewBall(Offset position, Offset direction) {
-    // Determine speed based on vector distance
     double speed = direction.distance * 2.5;
-    speed = max(100.0, min(speed, 900.0)); // Cap speed safe values
+    speed = max(100.0, min(speed, 900.0));
 
     final Offset initVelocity = (direction.distance == 0)
         ? const Offset(150, -150)
         : (direction / direction.distance) * speed;
 
     final random = Random();
-    final double r = random.nextDouble() * 12.0 + 12.0; // Random radius 12-24
+    final double r = random.nextDouble() * 12.0 + 12.0;
 
     setState(() {
       _balls.add(
@@ -533,12 +539,10 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
     if (_activeTool == 'erase') {
       _eraseAtPoint(localPos);
     } else if (_activeTool == 'draw' && _dragStart != null) {
-      // Draw continuously
       _dragEnd = localPos;
     } else {
       _dragEnd = localPos;
     }
-    setState(() {});
   }
 
   void _handlePanEnd(DragEndDetails details) {
@@ -546,31 +550,29 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
       final Offset dragVector = _dragEnd! - _dragStart!;
 
       if (_activeTool == 'shoot') {
-        // Shoot ball opposite to drag direction (slingshot feel!)
         _addNewBall(_dragStart!, -dragVector);
       } else if (_activeTool == 'draw') {
         if (dragVector.distance > 8.0) {
-          _lineObstacles.add(
-            LineObstacle(
-              start: _dragStart!,
-              end: _dragEnd!,
-              color: _currentThemeColor,
-            ),
-          );
+          setState(() {
+            _lineObstacles.add(
+              LineObstacle(
+                start: _dragStart!,
+                end: _dragEnd!,
+                color: _currentThemeColor,
+              ),
+            );
+          });
         }
       }
     }
 
-    setState(() {
-      _dragStart = null;
-      _dragEnd = null;
-    });
+    _dragStart = null;
+    _dragEnd = null;
   }
 
   void _eraseAtPoint(Offset point) {
-    // Erase drawn lines near this touch point
+    bool linesRemoved = false;
     _lineObstacles.removeWhere((line) {
-      // Calculate distance to segment
       final Offset ab = line.end - line.start;
       final Offset ap = point - line.start;
       final double abLenSq = ab.dx * ab.dx + ab.dy * ab.dy;
@@ -579,8 +581,14 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
       double t = (ap.dx * ab.dx + ap.dy * ab.dy) / abLenSq;
       t = max(0.0, min(1.0, t));
       final Offset closest = line.start + ab * t;
-      return (point - closest).distance < 25.0;
+      final bool remove = (point - closest).distance < 25.0;
+      if (remove) linesRemoved = true;
+      return remove;
     });
+
+    if (linesRemoved) {
+      setState(() {});
+    }
   }
 
   @override
@@ -618,7 +626,11 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
             IconButton(
               icon: const Icon(Icons.refresh, color: Colors.amberAccent),
               tooltip: 'Reset Simulation',
-              onPressed: _resetDemoEnvironment,
+              onPressed: () {
+                setState(() {
+                  _resetDemoEnvironment();
+                });
+              },
             ),
             IconButton(
               icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
@@ -630,7 +642,7 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
         body: SafeArea(
           child: Column(
             children: [
-              // Main Interactive Canvas
+              // Main Interactive Canvas with highly optimized isolated repaint boundaries
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12.0),
@@ -645,52 +657,58 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
                         onPanStart: _handlePanStart,
                         onPanUpdate: _handlePanUpdate,
                         onPanEnd: _handlePanEnd,
-                        child: Stack(
-                          children: [
-                            // 1. Drawing standard custom lines, bumpers, and balls
-                            CustomPaint(
-                              size: Size.infinite,
-                              painter: CustomCanvasPainter(
-                                balls: _balls,
-                                obstacles: _obstacles,
-                                lineObstacles: _lineObstacles,
-                                dragStart: _dragStart,
-                                dragEnd: _dragEnd,
-                                themeColor: _currentThemeColor,
-                                showGrid: _showGrid,
-                              ),
-                            ),
-                            // 2. High performance separate particle system layer
-                            CustomPaint(
-                              size: Size.infinite,
-                              painter: ParticlePainter(particles: _particles),
-                            ),
-                            // Helper tutorial banner if empty
-                            if (_balls.isEmpty)
-                              Center(
-                                child: Container(
-                                  padding: const EdgeInsets.all(16),
-                                  margin: const EdgeInsets.symmetric(horizontal: 40),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withAlpha((0.75 * 255).round()),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.cyanAccent.withAlpha((0.4 * 255).round())),
-                                  ),
-                                  child: const Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.touch_app, color: Colors.cyanAccent, size: 40),
-                                      SizedBox(height: 10),
-                                      Text(
-                                        'All balls cleared! Drag & Pull anywhere to shoot new neon balls, or toggle drawing tools below.',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(color: Colors.white70, fontSize: 13),
-                                      ),
-                                    ],
-                                  ),
+                        child: RepaintBoundary(
+                          child: Stack(
+                            children: [
+                              // 1. Drawing standard custom lines, bumpers, and balls with Repaint Listener optimized CustomPainter
+                              CustomPaint(
+                                size: Size.infinite,
+                                painter: CustomCanvasPainter(
+                                  balls: _balls,
+                                  obstacles: _obstacles,
+                                  lineObstacles: _lineObstacles,
+                                  dragStart: _dragStart,
+                                  dragEnd: _dragEnd,
+                                  themeColor: _currentThemeColor,
+                                  showGrid: _showGrid,
+                                  repaint: _ticker, // OPTIMIZED: Listenable triggers repaint independently of widget builds
                                 ),
                               ),
-                          ],
+                              // 2. High performance separate particle system layer
+                              CustomPaint(
+                                size: Size.infinite,
+                                painter: ParticlePainter(
+                                  particles: _particles,
+                                  repaint: _ticker, // OPTIMIZED: Particles are updated independently of state builds
+                                ),
+                              ),
+                              // Helper tutorial banner if empty
+                              if (_balls.isEmpty)
+                                Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(16),
+                                    margin: const EdgeInsets.symmetric(horizontal: 40),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withAlpha((0.75 * 255).round()),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: Colors.cyanAccent.withAlpha((0.4 * 255).round())),
+                                    ),
+                                    child: const Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.touch_app, color: Colors.cyanAccent, size: 40),
+                                        SizedBox(height: 10),
+                                        Text(
+                                          'All balls cleared! Drag & Pull anywhere to shoot new neon balls, or toggle drawing tools below.',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -698,7 +716,7 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with TickerProvid
                 ),
               ),
 
-              // Glassmorphic Control panel
+              // Glassmorphic Control panel (only rebuilds when state modifiers actually change)
               _buildBottomControls(),
             ],
           ),
