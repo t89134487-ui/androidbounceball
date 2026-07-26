@@ -4,7 +4,8 @@ import '../models/particle.dart';
 class ParticlePainter extends CustomPainter {
   final List<Particle> particles;
 
-  ParticlePainter({required this.particles});
+  ParticlePainter({required Listenable repaint, required this.particles})
+      : super(repaint: repaint);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -19,16 +20,16 @@ class ParticlePainter extends CustomPainter {
       // Draw particle as a glowing soft circle or tiny diamond
       canvas.drawCircle(p.position, p.size * alpha, paint);
 
-      // Flare glow
+      // Flare glow - Concentric circles for high performance instead of CPU bound MaskFilter.blur
       final glowPaint = Paint()
-        ..color = p.color.withAlpha((alpha * 0.3 * 255).round())
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
+        ..color = p.color.withAlpha((alpha * 0.15 * 255).round())
+        ..style = PaintingStyle.fill;
       canvas.drawCircle(p.position, p.size * alpha * 2.5, glowPaint);
     }
   }
 
   @override
   bool shouldRepaint(covariant ParticlePainter oldDelegate) {
-    return true;
+    return false; // Driven fully by the repaint Listenable
   }
 }
