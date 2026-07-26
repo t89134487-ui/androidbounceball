@@ -11,63 +11,30 @@ class CustomCanvasPainter extends CustomPainter {
   final Offset? dragStart;
   final Offset? dragEnd;
   final Color themeColor;
-  final bool showGrid;
 
   CustomCanvasPainter({
+    required Listenable repaint,
     required this.balls,
     required this.obstacles,
     required this.lineObstacles,
     this.dragStart,
     this.dragEnd,
     required this.themeColor,
-    required this.showGrid,
-  });
+  }) : super(repaint: repaint);
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. Draw futuristic space grid background
-    if (showGrid) {
-      _drawBackgroundGrid(canvas, size);
-    }
-
-    // 2. Draw user-drawn obstacle lines
+    // 1. Draw user-drawn obstacle lines
     _drawLines(canvas);
 
-    // 3. Draw standard bumpers/obstacles (Vortex, Teleporter, Peg, Bumper)
+    // 2. Draw standard bumpers/obstacles (Vortex, Teleporter, Peg, Bumper)
     _drawObstacles(canvas);
 
-    // 4. Draw drag-to-shoot line or drag-to-draw line
+    // 3. Draw drag-to-shoot line or drag-to-draw line
     _drawDragGuide(canvas);
 
-    // 5. Draw balls and trails
+    // 4. Draw balls and trails
     _drawBalls(canvas);
-  }
-
-  void _drawBackgroundGrid(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = themeColor.withAlpha((0.06 * 255).round())
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    const double spacing = 40.0;
-    for (double x = 0; x < size.width; x += spacing) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-    for (double y = 0; y < size.height; y += spacing) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    // Subtly glow center or corners
-    final centerGlow = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          themeColor.withAlpha((0.08 * 255).round()),
-          Colors.transparent,
-        ],
-      ).createShader(Rect.fromCircle(
-          center: Offset(size.width / 2, size.height / 2),
-          radius: min(size.width, size.height) * 0.7));
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), centerGlow);
   }
 
   void _drawLines(Canvas canvas) {
@@ -78,15 +45,21 @@ class CustomCanvasPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..style = PaintingStyle.stroke;
 
-      // Outer glow of lines
-      final glowPaint = Paint()
-        ..color = line.color.withAlpha((0.4 * 255).round())
-        ..strokeWidth = line.thickness + 6.0
+      // Outer glow of lines - Optimized to avoid MaskFilter.blur
+      final glowPaint1 = Paint()
+        ..color = line.color.withAlpha((0.12 * 255).round())
+        ..strokeWidth = line.thickness + 8.0
         ..strokeCap = StrokeCap.round
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0)
         ..style = PaintingStyle.stroke;
 
-      canvas.drawLine(line.start, line.end, glowPaint);
+      final glowPaint2 = Paint()
+        ..color = line.color.withAlpha((0.22 * 255).round())
+        ..strokeWidth = line.thickness + 4.0
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke;
+
+      canvas.drawLine(line.start, line.end, glowPaint1);
+      canvas.drawLine(line.start, line.end, glowPaint2);
       canvas.drawLine(line.start, line.end, linePaint);
     }
   }
@@ -97,12 +70,12 @@ class CustomCanvasPainter extends CustomPainter {
 
       switch (obs.type) {
         case ObstacleType.circularBumper:
-          // Draw Neon Ring Bumper
+          // Draw Neon Ring Bumper - Optimized to avoid MaskFilter.blur
           final double baseRadius = obs.radius * bonusScale;
           final outerGlow = Paint()
-            ..color = obs.color.withAlpha((0.35 * 255).round())
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0);
-          canvas.drawCircle(obs.position, baseRadius + 4, outerGlow);
+            ..color = obs.color.withAlpha((0.18 * 255).round())
+            ..style = PaintingStyle.fill;
+          canvas.drawCircle(obs.position, baseRadius + 6.0, outerGlow);
 
           final fillPaint = Paint()
             ..shader = RadialGradient(
@@ -142,10 +115,11 @@ class CustomCanvasPainter extends CustomPainter {
           final Rect rect = Rect.fromCenter(center: obs.position, width: w, height: h);
           final RRect rrect = RRect.fromRectAndRadius(rect, const Radius.circular(8));
 
+          // Optimized to avoid MaskFilter.blur
           final glowPaint = Paint()
-            ..color = obs.color.withAlpha((0.4 * 255).round())
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
-          canvas.drawRRect(rrect.inflate(3), glowPaint);
+            ..color = obs.color.withAlpha((0.18 * 255).round())
+            ..style = PaintingStyle.fill;
+          canvas.drawRRect(rrect.inflate(4.0), glowPaint);
 
           final fillPaint = Paint()
             ..shader = LinearGradient(
@@ -168,10 +142,11 @@ class CustomCanvasPainter extends CustomPainter {
           final double r = obs.radius * bonusScale;
           final double spin = DateTime.now().millisecondsSinceEpoch / 400.0;
 
+          // Optimized to avoid MaskFilter.blur
           final glowPaint = Paint()
-            ..color = obs.color.withAlpha((0.3 * 255).round())
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12.0);
-          canvas.drawCircle(obs.position, r + 10, glowPaint);
+            ..color = obs.color.withAlpha((0.15 * 255).round())
+            ..style = PaintingStyle.fill;
+          canvas.drawCircle(obs.position, r + 12.0, glowPaint);
 
           // Swirling lines
           for (int i = 0; i < 4; i++) {
@@ -197,11 +172,11 @@ class CustomCanvasPainter extends CustomPainter {
           final double r = obs.radius;
           final double pulse = 1.0 + 0.1 * sin(DateTime.now().millisecondsSinceEpoch / 150.0);
 
-          // Outer magical glow
+          // Outer magical glow - Optimized to avoid MaskFilter.blur
           final glowPaint = Paint()
-            ..color = obs.color.withAlpha((0.5 * 255).round())
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
-          canvas.drawCircle(obs.position, r * pulse + 2, glowPaint);
+            ..color = obs.color.withAlpha((0.2 * 255).round())
+            ..style = PaintingStyle.fill;
+          canvas.drawCircle(obs.position, r * pulse + 6.0, glowPaint);
 
           // Concentric portal rings
           final ringPaint = Paint()
@@ -314,11 +289,11 @@ class CustomCanvasPainter extends CustomPainter {
 
     switch (ball.skin) {
       case BallSkin.neonGlow:
-        // Thick glowing neon ball
+        // Thick glowing neon ball - Optimized to avoid MaskFilter.blur
         final glowPaint = Paint()
-          ..color = ball.color.withAlpha((0.4 * 255).round())
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0);
-        canvas.drawCircle(Offset.zero, ball.radius + 6, glowPaint);
+          ..color = ball.color.withAlpha((0.2 * 255).round())
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(Offset.zero, ball.radius + 6.0, glowPaint);
 
         final fillPaint = Paint()
           ..shader = RadialGradient(
@@ -432,6 +407,6 @@ class CustomCanvasPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomCanvasPainter oldDelegate) {
-    return true; // Continuously animate
+    return false; // Driven fully by the repaint Listenable
   }
 }

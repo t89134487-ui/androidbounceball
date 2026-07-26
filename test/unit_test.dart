@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:bouncing_ball/models/ball.dart';
 import 'package:bouncing_ball/models/obstacle.dart';
 import 'package:bouncing_ball/models/particle.dart';
+import 'package:bouncing_ball/widgets/canvas_painter.dart';
+import 'package:bouncing_ball/widgets/grid_painter.dart';
 
 void main() {
   group('Ball Model Unit Tests', () {
@@ -127,6 +129,30 @@ void main() {
 
       particle.update(0.3);
       expect(particle.isDead, isTrue);
+    });
+  });
+
+  group('Painters Unit Tests', () {
+    test('GridPainter shouldRepaint test', () {
+      final painter1 = GridPainter(themeColor: Colors.red);
+      final painter2 = GridPainter(themeColor: Colors.red);
+      final painter3 = GridPainter(themeColor: Colors.blue);
+
+      expect(painter1.shouldRepaint(painter2), isFalse);
+      expect(painter1.shouldRepaint(painter3), isTrue);
+    });
+
+    test('CustomCanvasPainter shouldRepaint is false', () {
+      final notifier = ValueNotifier<int>(0);
+      final painter = CustomCanvasPainter(
+        repaint: notifier,
+        balls: [],
+        obstacles: [],
+        lineObstacles: [],
+        themeColor: Colors.red,
+      );
+      expect(painter.shouldRepaint(painter), isFalse);
+      notifier.dispose();
     });
   });
 }
