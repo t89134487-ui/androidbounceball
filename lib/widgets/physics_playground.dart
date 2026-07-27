@@ -643,38 +643,33 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with SingleTicker
                         onPanEnd: _handlePanEnd,
                         child: RepaintBoundary(
                           child: Stack(
+                            fit: StackFit.expand,
                             children: [
                               // 1. Static/reusable background space grid
                               if (_showGrid)
-                                Positioned.fill(
-                                  child: CustomPaint(
-                                    size: Size.infinite,
-                                    painter: GridPainter(themeColor: _currentThemeColor),
-                                  ),
+                                CustomPaint(
+                                  size: Size.infinite,
+                                  painter: GridPainter(themeColor: _currentThemeColor),
                                 ),
                               // 2. High performance separate drawing/bumper/ball layer (fully optimized updates via RepaintNotifier)
-                              Positioned.fill(
-                                child: CustomPaint(
-                                  size: Size.infinite,
-                                  painter: CustomCanvasPainter(
-                                    repaint: _canvasRepaintNotifier,
-                                    balls: _balls,
-                                    obstacles: _obstacles,
-                                    lineObstacles: _lineObstacles,
-                                    dragStart: _dragStart,
-                                    dragEnd: _dragEnd,
-                                    themeColor: _currentThemeColor,
-                                  ),
+                              CustomPaint(
+                                size: Size.infinite,
+                                painter: CustomCanvasPainter(
+                                  repaint: _canvasRepaintNotifier,
+                                  balls: _balls,
+                                  obstacles: _obstacles,
+                                  lineObstacles: _lineObstacles,
+                                  dragStart: _dragStart,
+                                  dragEnd: _dragEnd,
+                                  themeColor: _currentThemeColor,
                                 ),
                               ),
                               // 3. High performance separate particle layer (fully optimized updates via RepaintNotifier)
-                              Positioned.fill(
-                                child: CustomPaint(
-                                  size: Size.infinite,
-                                  painter: ParticlePainter(
-                                    repaint: _canvasRepaintNotifier,
-                                    particles: _particles,
-                                  ),
+                              CustomPaint(
+                                size: Size.infinite,
+                                painter: ParticlePainter(
+                                  repaint: _canvasRepaintNotifier,
+                                  particles: _particles,
                                 ),
                               ),
                               // Helper tutorial banner
