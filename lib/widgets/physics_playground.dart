@@ -98,7 +98,7 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with SingleTicker
     _lineObstacles.clear();
     _particles.clear();
 
-    // Add initial bouncy balls
+    // Add initial bouncy balls (including orange balls as requested)
     _balls.addAll([
       Ball(
         position: const Offset(100, 150),
@@ -120,6 +120,20 @@ class _PhysicsPlaygroundState extends State<PhysicsPlayground> with SingleTicker
         radius: 16.0,
         color: Colors.greenAccent,
         skin: BallSkin.disco,
+      ),
+      Ball(
+        position: const Offset(150, 220),
+        velocity: const Offset(140, -110),
+        radius: 20.0,
+        color: Colors.orangeAccent,
+        skin: BallSkin.fireball,
+      ),
+      Ball(
+        position: const Offset(220, 140),
+        velocity: const Offset(-110, 140),
+        radius: 17.0,
+        color: Colors.orange,
+        skin: BallSkin.classic,
       ),
     ]);
 
